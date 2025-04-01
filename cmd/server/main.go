@@ -9,9 +9,8 @@ import (
 	"syscall"
 
 	"github.com/indienSs/go-std/internal/config"
+	"github.com/indienSs/go-std/internal/handlers"
 	"github.com/indienSs/go-std/internal/repository/postgres"
-	"github.com/indienSs/go-std/modules/books"
-	"github.com/indienSs/go-std/modules/users"
 )
 
 func main() {
@@ -32,17 +31,20 @@ func main() {
 	}
 	defer pg.Close()
 
-	http.HandleFunc("GET /api/books", books.GetAll)
-	http.HandleFunc("POST /api/books", books.AddOne)
+	usersHandler := handlers.NewUserHandler(pg)
+	bookHandler := handlers.NewBookHandler(pg)
+
+	http.HandleFunc("GET /api/books", bookHandler.GetBooks)
+	http.HandleFunc("POST /api/books", bookHandler.CreateBook)
 	
-	http.HandleFunc("GET /api/books/:id", books.GetOne)
-	http.HandleFunc("PUT /api/books/:id", books.ChangeOne)
-	http.HandleFunc("DELETE /api/books/:id", books.DeleteOne)
+	http.HandleFunc("GET /api/books/:id", bookHandler.GetBook)
+	http.HandleFunc("PUT /api/books/:id", bookHandler.UpdateBook)
+	http.HandleFunc("DELETE /api/books/:id", bookHandler.DeleteBook)
 	
-	http.HandleFunc("POST /api/users/register", users.Register)
-	http.HandleFunc("POST /api/users/login", users.Login)
-	http.HandleFunc("GET /api/users/me", users.GetMe)
-	http.HandleFunc("PUT /api/users/:id/role", users.GetRole)
+	http.HandleFunc("POST /api/users/register", usersHandler.CreateUser)
+	http.HandleFunc("POST /api/users/login", usersHandler.UpdateUser)
+	http.HandleFunc("GET /api/users/me", usersHandler.GetUser)
+	http.HandleFunc("PUT /api/users/:id/role", usersHandler.UpdateUser)
 	
 	
 	_, cancel := context.WithCancel(context.Background())
