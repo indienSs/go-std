@@ -8,6 +8,7 @@ import (
 
 	"github.com/indienSs/go-std/internal/models"
 	"github.com/indienSs/go-std/internal/repository/postgres"
+	"github.com/indienSs/go-std/internal/types"
 )
 
 type UserHandler struct {
@@ -19,21 +20,10 @@ func NewUserHandler(pg *postgres.Postgres) *UserHandler {
 }
 
 func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.pg.Db.Query("SELECT id, username, email, createdAt, updatedAt FROM users")
+	users, err := h.pg.GetUsers()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-	defer rows.Close()
-
-	var users []models.User
-	for rows.Next() {
-		var user models.User
-		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		users = append(users, user)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -47,9 +37,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user models.User
-	err = h.pg.Db.QueryRow("SELECT id, username, email, createdAt, updatedAt FROM users WHERE id = $1", id).
-		Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+	user, err := h.pg.GetUser(id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "User not found", http.StatusNotFound)
@@ -70,10 +58,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.pg.Db.QueryRow(
-		"INSERT INTO users (username, email) VALUES ($1, $2) RETURNING id, createdAt, updatedAt",
-		user.Username, user.Email,
-	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	err := h.pg.CreateUser(&user)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -97,10 +82,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.pg.Db.QueryRow(
-		"UPDATE users SET username = $1, email = $2, updatedAt = NOW() WHERE id = $3 RETURNING createdAt, updatedAt",
-		user.Username, user.Email, id,
-	).Scan(&user.CreatedAt, &user.UpdatedAt)
+	err = h.pg.UpdateUser(id, &user)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "User not found", http.StatusNotFound)
@@ -122,20 +104,13 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.pg.Db.Exec("DELETE FROM users WHERE id = $1", id)
+	err = h.pg.DeleteUser(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if rowsAffected == 0 {
-		http.Error(w, "User not found", http.StatusNotFound)
+		if err == types.ErrNotFound {
+			http.Error(w, "User not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 

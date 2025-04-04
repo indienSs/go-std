@@ -8,6 +8,7 @@ import (
 
 	"github.com/indienSs/go-std/internal/models"
 	"github.com/indienSs/go-std/internal/repository/postgres"
+	"github.com/indienSs/go-std/internal/types"
 )
 
 type BookHandler struct {
@@ -19,21 +20,10 @@ func NewBookHandler(pg *postgres.Postgres) *BookHandler {
 }
 
 func (h *BookHandler) GetBooks(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.pg.Db.Query("SELECT id, title, author, publicationDate FROM books")
+	books, err := h.pg.GetBooks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-	defer rows.Close()
-
-	var books []models.Book
-	for rows.Next() {
-		var book models.Book
-		if err := rows.Scan(&book.ID, &book.Title, &book.Author, &book.PublicationDate); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		books = append(books, book)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -47,9 +37,8 @@ func (h *BookHandler) GetBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var book models.Book
-	err = h.pg.Db.QueryRow("SELECT id, title, author, publicationDate FROM books WHERE id = $1", id).
-		Scan(&book.ID, &book.Title, &book.Author, &book.PublicationDate)
+	book, err := h.pg.GetBook(id)
+	
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Book not found", http.StatusNotFound)
@@ -70,10 +59,7 @@ func (h *BookHandler) CreateBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.pg.Db.QueryRow(
-		"INSERT INTO books (title, author, publicationDate) VALUES ($1, $2, $3, $4) RETURNING id",
-		book.Title, book.Author, book.PublicationDate,
-	).Scan(&book.ID)
+	err := h.pg.CreateBook(&book)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -97,10 +83,8 @@ func (h *BookHandler) UpdateBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.pg.Db.Exec(
-		"UPDATE books SET title = $1, author = $2, publicationDate = $3 WHERE id = $5",
-		book.Title, book.Author, book.PublicationDate, id,
-	)
+	err = h.pg.UpdateBook(id, book)
+	
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -118,20 +102,13 @@ func (h *BookHandler) DeleteBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.pg.Db.Exec("DELETE FROM books WHERE id = $1", id)
+	err = h.pg.DeleteBook(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if rowsAffected == 0 {
-		http.Error(w, "Book not found", http.StatusNotFound)
+		if err == types.ErrNotFound {
+			http.Error(w, "Book not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 

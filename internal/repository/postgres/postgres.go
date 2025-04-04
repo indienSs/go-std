@@ -11,7 +11,7 @@ import (
 )
 
 type Postgres struct {
-	Db *sql.DB
+	db *sql.DB
 }
 
 func New(cfg config.PostgresConfig) (*Postgres, error) {
@@ -30,9 +30,9 @@ func New(cfg config.PostgresConfig) (*Postgres, error) {
 		return nil, fmt.Errorf("failed to ping postgres: %w", err)
 	}
 
-	return &Postgres{Db: db}, nil
+	return &Postgres{db: db}, nil
 }
 
 func (p *Postgres) Close() error {
-	return p.Db.Close()
+	return p.db.Close()
 }
